@@ -2,7 +2,7 @@ using UnityEngine;
 
 public class PlayerController : MonoBehaviour
 {
-
+    [Header("Movement & Jump")]
     [SerializeField] private float moveSpeed = 7f;
     [SerializeField] private float jumpForce = 14f;
 
@@ -16,48 +16,51 @@ public class PlayerController : MonoBehaviour
     [SerializeField] private Transform visualsTransform;
 
     private Rigidbody2D rb;
+    private PlayerBlock playerBlock;
     private float moveInput;
     private bool isGrounded;
 
-
-
-    void Start()
+    private void Start()
     {
         rb = GetComponent<Rigidbody2D>();
+        playerBlock = GetComponent<PlayerBlock>();
     }
 
-
-   
-    void Update()
+    private void Update()
     {
         moveInput = Input.GetAxisRaw("Horizontal");
-
         isGrounded = Physics2D.OverlapCircle(groundCheck.position, groundCheckRadius, groundLayer);
 
-        if (Input.GetButtonDown("Jump") && isGrounded)
+        bool isBlocking = playerBlock != null && playerBlock.IsBlocking;
+
+        if (Input.GetButtonDown("Jump") && isGrounded && !isBlocking)
         {
             rb.linearVelocity = new Vector2(rb.linearVelocity.x, jumpForce);
         }
 
-        if (moveInput > 0)
+        if (!isBlocking)
         {
-            visualsTransform.localScale = new Vector3(1, 1, 1);
-        }
-        else if (moveInput < 0)
-        {
-            visualsTransform.localScale = new Vector3(-1, 1, 1);
+            if (moveInput > 0)
+            {
+                visualsTransform.localScale = new Vector3(1, 1, 1);
+            }
+            else if (moveInput < 0)
+            {
+                visualsTransform.localScale = new Vector3(-1, 1, 1);
+            }
         }
 
-        animator.SetFloat("Speed", Mathf.Abs(moveInput));
+        animator.SetFloat("Speed", isBlocking ? 0f : Mathf.Abs(moveInput));
         animator.SetBool("IsGrounded", isGrounded);
-
-
+        animator.SetFloat("YVelocity", rb.linearVelocity.y);
     }
 
     private void FixedUpdate()
     {
-       
-        rb.linearVelocity = new Vector2(moveInput * moveSpeed, rb.linearVelocity.y);
+        bool isBlocking = playerBlock != null && playerBlock.IsBlocking;
+        float currentSpeed = isBlocking ? 0f : moveSpeed;
+
+        rb.linearVelocity = new Vector2(moveInput * currentSpeed, rb.linearVelocity.y);
     }
 
     private void OnDrawGizmosSelected()
