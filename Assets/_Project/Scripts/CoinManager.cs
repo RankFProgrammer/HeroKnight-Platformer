@@ -27,6 +27,15 @@ public class CoinManager : MonoBehaviour
         UpdateUI();
     }
 
+    public bool SpendCoins(int amount)
+    {
+        if (CurrentCoins < amount) return false;
+
+        CurrentCoins -= amount;
+        UpdateUI();
+        return true;
+    }
+
     private void UpdateUI()
     {
         if (coinText != null)

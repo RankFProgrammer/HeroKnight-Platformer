@@ -12,6 +12,10 @@ public class PlayerCombat : MonoBehaviour
     [SerializeField] private int[] comboDamages = { 20, 25, 40 };
     [SerializeField] private float[] comboKnockbacks = { 7f, 8.5f, 13f };
 
+    [Header("Magic & Enchantment Visuals")]
+    [SerializeField] private GameObject swordWavePrefab;
+    [SerializeField] private GameObject bladeEnchantGlow; // Optional child Light2D or ParticleSystem
+
     [Header("Hitbox")]
     [SerializeField] private Transform attackPoint;
     [SerializeField] private float attackRange = 0.85f;
@@ -40,10 +44,14 @@ public class PlayerCombat : MonoBehaviour
 
         if (visualsTransform == null && animator != null)
             visualsTransform = animator.transform;
+
+        if (bladeEnchantGlow != null)
+            bladeEnchantGlow.SetActive(false);
     }
 
     private void Update()
     {
+        if (ShopUI.Instance != null && ShopUI.Instance.IsOpen) return;
         if (health != null && (health.IsDead || health.IsStunned))
         {
             if (isAttacking) CancelAttack();
@@ -61,6 +69,12 @@ public class PlayerCombat : MonoBehaviour
         {
             StartComboAttack();
         }
+    }
+
+    public void EnableWeaponEnchantment(int bladeLevel)
+    {
+        if (bladeEnchantGlow != null && bladeLevel > 0)
+            bladeEnchantGlow.SetActive(true);
     }
 
     private void StartComboAttack()
@@ -96,6 +110,7 @@ public class PlayerCombat : MonoBehaviour
         }
 
         ApplySwingHitbox(index, step);
+        TryFireSwordWave();
 
         float remainingTime = Mathf.Max(0.05f, swingDurations[index] - hitActiveDelays[index]);
         yield return new WaitForSeconds(remainingTime);
@@ -105,11 +120,26 @@ public class PlayerCombat : MonoBehaviour
         attackRoutine = null;
     }
 
+    private void TryFireSwordWave()
+    {
+        if (swordWavePrefab == null || attackPoint == null || UpgradeManager.Instance == null) return;
+        if (!UpgradeManager.Instance.CanCastSwordWave) return;
+
+        float facingDir = visualsTransform != null ? Mathf.Sign(visualsTransform.localScale.x) : 1f;
+        GameObject waveObj = Instantiate(swordWavePrefab, attackPoint.position, Quaternion.identity);
+        SwordWaveProjectile wave = waveObj.GetComponent<SwordWaveProjectile>();
+        if (wave != null)
+            wave.Launch(facingDir, UpgradeManager.Instance.BonusDamage / 2);
+
+        UpgradeManager.Instance.NotifySwordWaveCast();
+    }
+
     private void ApplySwingHitbox(int index, int step)
     {
         if (attackPoint == null) return;
 
-        int damage = comboDamages[index];
+        int bonusDamage = UpgradeManager.Instance != null ? UpgradeManager.Instance.BonusDamage : 0;
+        int damage = comboDamages[index] + bonusDamage;
         float knockback = comboKnockbacks[index];
         float facingDir = visualsTransform != null ? Mathf.Sign(visualsTransform.localScale.x) : 1f;
 

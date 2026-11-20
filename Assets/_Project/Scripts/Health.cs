@@ -12,6 +12,8 @@ public class Health : MonoBehaviour
     [SerializeField] private float knockbackResistance = 1f;
     [SerializeField] private float defaultKnockbackForce = 7f;
     [SerializeField] private float hurtStunDuration = 0.2f;
+    [Tooltip("If true, this character will not play the Hurt trigger or get hit-stunned while actively attacking.")]
+    [SerializeField] private bool poiseDuringAttack = true;
 
     [Header("References")]
     [SerializeField] private Animator animator;
@@ -29,6 +31,7 @@ public class Health : MonoBehaviour
     private Color originalColor;
     private Rigidbody2D rb;
     private PlayerBlock playerBlock;
+    private EnemyAI enemyAI;
 
     public bool IsDead => isDead;
     public bool IsStunned => isStunned;
@@ -42,6 +45,7 @@ public class Health : MonoBehaviour
         currentHealth = maxHealth;
         rb = GetComponent<Rigidbody2D>();
         playerBlock = GetComponent<PlayerBlock>();
+        enemyAI = GetComponent<EnemyAI>();
 
         if (animator == null)
             animator = GetComponentInChildren<Animator>();
@@ -63,12 +67,16 @@ public class Health : MonoBehaviour
             return;
         }
 
+
         currentHealth = Mathf.Max(0, currentHealth - damage);
         OnHealthChanged?.Invoke(currentHealth, maxHealth);
         Debug.Log($"{gameObject.name} took {damage} damage! HP left: {currentHealth}");
 
+        bool hasPoiseActive = poiseDuringAttack && IsCurrentlyAttacking();
+
         float kbForce = customKnockback >= 0f ? customKnockback : defaultKnockbackForce;
-        ApplyKnockback(attackerX, hasAttackerPos, kbForce);
+        // Reduce knockback slightly while poise is active so the enemy stays planted through their swing
+        ApplyKnockback(attackerX, hasAttackerPos, hasPoiseActive ? kbForce * 0.35f : kbForce);
 
         if (CombatFeel.Instance != null)
             CombatFeel.Instance.TriggerImpact(0.04f, 0.12f, 0.12f, hasAttackerPos ? Mathf.Sign(transform.position.x - attackerX) : 0f);
@@ -80,13 +88,41 @@ public class Health : MonoBehaviour
         {
             Die();
         }
-        else
+        else if (!hasPoiseActive)
         {
             if (animator != null)
                 animator.SetTrigger("Hurt");
 
             StartCoroutine(StunRoutine());
         }
+    }
+    public void Heal(int amount)
+    {
+        if (isDead) return;
+        currentHealth = Mathf.Min(maxHealth, currentHealth + amount);
+        OnHealthChanged?.Invoke(currentHealth, maxHealth);
+    }
+
+    public void UpgradeMaxHealth(int bonusAmount, bool fullHeal = true)
+    {
+        maxHealth += bonusAmount;
+        currentHealth = fullHeal ? maxHealth : Mathf.Min(maxHealth, currentHealth + bonusAmount);
+        OnHealthChanged?.Invoke(currentHealth, maxHealth);
+    }
+
+    private bool IsCurrentlyAttacking()
+    {
+        if (enemyAI != null && enemyAI.enabled)
+            return true;
+
+        if (animator != null)
+        {
+            AnimatorStateInfo state = animator.GetCurrentAnimatorStateInfo(0);
+            if (state.IsName("Attack") || state.IsName("Attack1") || state.IsName("Attack2") || state.IsName("HeavyAttack"))
+                return true;
+        }
+
+        return false;
     }
 
     private void ApplyKnockback(float attackerX, bool hasAttackerPos, float force)
@@ -135,11 +171,10 @@ public class Health : MonoBehaviour
         if (col != null)
             col.enabled = false;
 
-        EnemyAI ai = GetComponent<EnemyAI>();
-        if (ai != null)
+        if (enemyAI != null)
         {
-            ai.StopAllCoroutines();
-            ai.enabled = false;
+            enemyAI.StopAllCoroutines();
+            enemyAI.enabled = false;
         }
 
         if (playerBlock != null)
